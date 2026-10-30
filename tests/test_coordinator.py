@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 from dataclasses import dataclass
 from types import ModuleType, SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from conftest import PACKAGE, load_component_module
@@ -43,6 +43,10 @@ class FakeDataUpdateCoordinator:
         self.name = name
         self.update_interval = update_interval
         self.data = None
+        self.shutdown_called = False
+
+    async def async_shutdown(self):
+        self.shutdown_called = True
 
     def __class_getitem__(cls, item):
         return cls
@@ -61,15 +65,26 @@ class FakeFullDevice:
 def coordinator_module(monkeypatch):
     """Load the coordinator with minimal Home Assistant module stand-ins."""
     signals = []
+    timers = []
 
     homeassistant = ModuleType("homeassistant")
     core = ModuleType("homeassistant.core")
     core.HomeAssistant = object
+    core.CALLBACK_TYPE = object
+    core.callback = lambda func: func
     exceptions = ModuleType("homeassistant.exceptions")
     exceptions.ConfigEntryAuthFailed = ConfigEntryAuthFailed
     helpers = ModuleType("homeassistant.helpers")
     dispatcher = ModuleType("homeassistant.helpers.dispatcher")
     dispatcher.async_dispatcher_send = lambda hass, signal: signals.append(signal)
+    event = ModuleType("homeassistant.helpers.event")
+
+    def async_call_later(hass, delay, action):
+        cancel = MagicMock()
+        timers.append(SimpleNamespace(delay=delay, action=action, cancel=cancel))
+        return cancel
+
+    event.async_call_later = async_call_later
     update_coordinator = ModuleType("homeassistant.helpers.update_coordinator")
     update_coordinator.DataUpdateCoordinator = FakeDataUpdateCoordinator
     update_coordinator.UpdateFailed = UpdateFailed
@@ -79,11 +94,13 @@ def coordinator_module(monkeypatch):
     monkeypatch.setitem(sys.modules, "homeassistant.exceptions", exceptions)
     monkeypatch.setitem(sys.modules, "homeassistant.helpers", helpers)
     monkeypatch.setitem(sys.modules, "homeassistant.helpers.dispatcher", dispatcher)
+    monkeypatch.setitem(sys.modules, "homeassistant.helpers.event", event)
     monkeypatch.setitem(
         sys.modules, "homeassistant.helpers.update_coordinator", update_coordinator
     )
 
     constants = ModuleType(f"{PACKAGE}.const")
+    constants.COMMAND_REFRESH_DELAY = 3
     constants.DEFAULT_SCAN_INTERVAL = 30
     constants.DOMAIN = "smartthings"
     constants.MAIN = "main"
@@ -92,6 +109,7 @@ def coordinator_module(monkeypatch):
 
     module = load_component_module("coordinator")
     module._test_signals = signals
+    module._test_timers = timers
     return module
 
 
@@ -206,3 +224,91 @@ async def test_connection_failure_becomes_update_failed(coordinator_module):
         await coordinator._async_update_data()
 
     assert coordinator_module._test_signals == []
+
+
+def _online_client():
+    return SimpleNamespace(
+        get_device_status=AsyncMock(return_value={"raw": "status"}),
+        get_device_health=AsyncMock(
+            return_value=SimpleNamespace(state=HealthStatus.ONLINE)
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_refresh_device_polls_only_that_device(coordinator_module):
+    client = _online_client()
+    one = FakeFullDevice(_device("device-1"), {}, False)
+    two = FakeFullDevice(_device("device-2"), {}, False)
+    coordinator = coordinator_module.SmartThingsCoordinator(
+        object(),
+        object(),
+        client,
+        {"device-1": one, "device-2": two},
+        lambda value: value,
+    )
+
+    await coordinator.async_refresh_device("device-2")
+
+    client.get_device_status.assert_awaited_once_with("device-2")
+    assert two.status == {"raw": "status"}
+    assert two.online is True
+    assert one.status == {}
+    assert coordinator_module._test_signals == ["smartthings_update_device-2"]
+
+
+@pytest.mark.asyncio
+async def test_refresh_device_failure_is_swallowed(coordinator_module):
+    client = SimpleNamespace(
+        get_device_status=AsyncMock(side_effect=SmartThingsConnectionError("offline")),
+        get_device_health=AsyncMock(),
+    )
+    full = FakeFullDevice(_device("device-1"), {"old": "status"}, True)
+    coordinator = coordinator_module.SmartThingsCoordinator(
+        object(), object(), client, {"device-1": full}, lambda value: value
+    )
+
+    await coordinator.async_refresh_device("device-1")
+
+    assert full.status == {"old": "status"}
+    assert coordinator_module._test_signals == []
+
+
+@pytest.mark.asyncio
+async def test_schedule_device_refresh_debounces_per_device(coordinator_module):
+    client = _online_client()
+    full = FakeFullDevice(_device("device-1"), {}, False)
+    coordinator = coordinator_module.SmartThingsCoordinator(
+        object(), object(), client, {"device-1": full}, lambda value: value
+    )
+    timers = coordinator_module._test_timers
+
+    coordinator.async_schedule_device_refresh("device-1")
+    coordinator.async_schedule_device_refresh("device-1")
+
+    assert len(timers) == 2
+    assert timers[0].delay == 3
+    timers[0].cancel.assert_called_once()
+    timers[1].cancel.assert_not_called()
+
+    await timers[1].action(None)
+
+    client.get_device_status.assert_awaited_once_with("device-1")
+    assert coordinator_module._test_signals == ["smartthings_update_device-1"]
+
+
+@pytest.mark.asyncio
+async def test_shutdown_cancels_pending_refreshes(coordinator_module):
+    coordinator = coordinator_module.SmartThingsCoordinator(
+        object(),
+        object(),
+        _online_client(),
+        {"device-1": FakeFullDevice(_device("device-1"), {}, True)},
+        lambda value: value,
+    )
+    coordinator.async_schedule_device_refresh("device-1")
+
+    await coordinator.async_shutdown()
+
+    coordinator_module._test_timers[0].cancel.assert_called_once()
+    assert coordinator.shutdown_called is True

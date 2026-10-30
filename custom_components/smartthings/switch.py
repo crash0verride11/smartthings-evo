@@ -48,6 +48,8 @@ class SmartThingsSwitchEntityDescription(SwitchEntityDescription):
     status_attribute: Attribute
     component_translation_key: dict[str, str] | None = None
     on_key: str | bool = "on"
+    # Attribute value when off; only needed to assume state, so None when unknown.
+    off_key: str | bool | None = None
     on_command: Command = Command.ON
     off_command: Command = Command.OFF
 
@@ -460,6 +462,7 @@ class SmartThingsSwitch(SmartThingsEntity, SwitchEntity):
         await self.execute_device_command(
             self.switch_capability,
             self.entity_description.off_command,
+            assume=self._assumed_state(self._off_value()),
         )
 
     @override
@@ -468,7 +471,22 @@ class SmartThingsSwitch(SmartThingsEntity, SwitchEntity):
         await self.execute_device_command(
             self.switch_capability,
             self.entity_description.on_command,
+            assume=self._assumed_state(self.entity_description.on_key),
         )
+
+    def _off_value(self) -> str | bool | None:
+        """Return the attribute value when off, if known."""
+        if (off_key := self.entity_description.off_key) is not None:
+            return off_key
+        return "off" if self.entity_description.on_key == "on" else None
+
+    def _assumed_state(
+        self, key: str | bool | None
+    ) -> dict[tuple[Capability, Attribute], Any] | None:
+        """Return the state a command setting ``key`` should produce."""
+        if key is None:
+            return None
+        return {(self.switch_capability, self.entity_description.status_attribute): key}
 
     def _current_state(self) -> Any:
         return self.get_attribute_value(
@@ -494,6 +512,7 @@ class SmartThingsCommandSwitch(SmartThingsSwitch):
             self.switch_capability,
             self.entity_description.command,
             self.entity_description.off_key,
+            assume=self._assumed_state(self.entity_description.off_key),
         )
 
     @override
@@ -503,6 +522,7 @@ class SmartThingsCommandSwitch(SmartThingsSwitch):
             self.switch_capability,
             self.entity_description.command,
             self.entity_description.on_key,
+            assume=self._assumed_state(self.entity_description.on_key),
         )
 
 
@@ -579,6 +599,21 @@ class SmartThingsDishwasherWashingOptionSwitch(SmartThingsCommandSwitch):
         """Turn the switch on."""
         self._validate_before_execute()
         await super().async_turn_on(**kwargs)
+
+    @override
+    def _assumed_state(
+        self, key: str | bool | None
+    ) -> dict[tuple[Capability, Attribute], Any] | None:
+        # The option attribute is a dict ({"value": ..., "settable": [...]}); only
+        # "value" changes.
+        if key is None:
+            return None
+        return {
+            (self.switch_capability, self.entity_description.status_attribute): {
+                **super()._current_state(),
+                "value": key,
+            }
+        }
 
     @override
     def _current_state(self) -> Any:

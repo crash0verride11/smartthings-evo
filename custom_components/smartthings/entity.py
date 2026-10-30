@@ -15,10 +15,15 @@ from pysmartthings.models import HealthStatus
 
 from homeassistant.core import callback
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.dispatcher import (
+    async_dispatcher_connect,
+    async_dispatcher_send,
+)
 from homeassistant.helpers.entity import Entity
+from homeassistant.util import dt as dt_util
 
 from . import FullDevice
+from .assumed_state import AssumedValue, resolve_attribute_value
 from .const import DOMAIN, MAIN, SIGNAL_SMARTTHINGS_UPDATE
 
 
@@ -94,8 +99,13 @@ class SmartThingsEntity(Entity):
         return capability in self.device.status[self.component]
 
     def get_attribute_value(self, capability: Capability, attribute: Attribute) -> Any:
-        """Get the value of a device attribute."""
-        return self._internal_state[capability][attribute].value
+        """Get the value of a device attribute, preferring a recent command's result."""
+        return resolve_attribute_value(
+            self.device.assumed,
+            (self.component, capability, attribute),
+            self._internal_state[capability][attribute],
+            dt_util.utcnow(),
+        )
 
     def _update_attr(self) -> None:
         """Update the attributes."""
@@ -110,11 +120,31 @@ class SmartThingsEntity(Entity):
         capability: Capability,
         command: Command,
         argument: int | str | list[Any] | dict[str, Any] | None = None,
+        *,
+        assume: dict[tuple[Capability, Attribute], Any] | None = None,
     ) -> None:
-        """Execute a command on the device."""
+        """Execute a command on the device.
+
+        ``assume`` maps (capability, attribute) to the value the command should produce.
+        It's shown immediately, instead of the UI snapping back until the next poll.
+        """
         kwargs = {}
         if argument is not None:
             kwargs["argument"] = argument
+        device_id = self.device.device.device_id
+        # Stamp before sending: any device report newer than this postdates the command.
+        sent_at = dt_util.utcnow()
         await self.client.execute_device_command(
-            self.device.device.device_id, capability, command, self.component, **kwargs
+            device_id, capability, command, self.component, **kwargs
         )
+        if assume:
+            for (assumed_capability, attribute), value in assume.items():
+                self.device.assumed[(self.component, assumed_capability, attribute)] = (
+                    AssumedValue(value, sent_at)
+                )
+            # Device-wide signal so sibling entities reading the same attribute update too.
+            async_dispatcher_send(
+                self.hass, SIGNAL_SMARTTHINGS_UPDATE.format(device_id)
+            )
+        if (entry := self.platform.config_entry) is not None:
+            entry.runtime_data.coordinator.async_schedule_device_refresh(device_id)

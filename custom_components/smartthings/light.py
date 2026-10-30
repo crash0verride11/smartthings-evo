@@ -177,6 +177,7 @@ class SmartThingsLight(SmartThingsEntity, LightEntity, RestoreEntity):
             await self.execute_device_command(
                 Capability.SWITCH,
                 Command.ON,
+                assume={(Capability.SWITCH, Attribute.SWITCH): "on"},
             )
 
     @override
@@ -189,6 +190,7 @@ class SmartThingsLight(SmartThingsEntity, LightEntity, RestoreEntity):
             await self.execute_device_command(
                 Capability.SWITCH,
                 Command.OFF,
+                assume={(Capability.SWITCH, Attribute.SWITCH): "off"},
             )
 
     @override
@@ -243,7 +245,14 @@ class SmartThingsLight(SmartThingsEntity, LightEntity, RestoreEntity):
             Capability.COLOR_CONTROL,
             Command.SET_COLOR,
             argument={"hue": hue, "saturation": saturation},
+            assume={
+                (Capability.COLOR_CONTROL, Attribute.HUE): hue,
+                (Capability.COLOR_CONTROL, Attribute.SATURATION): saturation,
+            },
         )
+        # Without push, _update_handler never runs to switch the mode; do it here.
+        self._attr_color_mode = ColorMode.HS
+        self.async_write_ha_state()
 
     async def async_set_color_temp(self, value: int):
         """Set the color temperature of the device."""
@@ -252,7 +261,12 @@ class SmartThingsLight(SmartThingsEntity, LightEntity, RestoreEntity):
             Capability.COLOR_TEMPERATURE,
             Command.SET_COLOR_TEMPERATURE,
             argument=kelvin,
+            assume={
+                (Capability.COLOR_TEMPERATURE, Attribute.COLOR_TEMPERATURE): kelvin
+            },
         )
+        self._attr_color_mode = ColorMode.COLOR_TEMP
+        self.async_write_ha_state()
 
     async def async_set_level(self, brightness: int, transition: int) -> None:
         """Set the brightness of the light over transition."""
@@ -262,10 +276,17 @@ class SmartThingsLight(SmartThingsEntity, LightEntity, RestoreEntity):
         level = 1 if level == 0 and brightness > 0 else level
         level = max(min(level, 100), 0)
         duration = int(transition)
+        assume: dict[tuple[Capability, Attribute], Any] = {
+            (Capability.SWITCH_LEVEL, Attribute.LEVEL): level
+        }
+        if self.supports_capability(Capability.SWITCH):
+            # setLevel switches the light on (level > 0) or off (level 0) as well.
+            assume[(Capability.SWITCH, Attribute.SWITCH)] = "on" if level else "off"
         await self.execute_device_command(
             Capability.SWITCH_LEVEL,
             Command.SET_LEVEL,
             argument=[level, duration],
+            assume=assume,
         )
 
     @override
@@ -328,7 +349,11 @@ class SmartThingsLamp(SmartThingsEntity, LightEntity):
             await self.async_set_level(kwargs[ATTR_BRIGHTNESS])
             return
         if self._use_switch and self.supports_capability(Capability.SWITCH):
-            await self.execute_device_command(Capability.SWITCH, Command.ON)
+            await self.execute_device_command(
+                Capability.SWITCH,
+                Command.ON,
+                assume={(Capability.SWITCH, Attribute.SWITCH): "on"},
+            )
         # if no switch, turn on via brightness level
         else:
             await self.async_set_level(255)
@@ -337,12 +362,17 @@ class SmartThingsLamp(SmartThingsEntity, LightEntity):
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the lamp off."""
         if self._use_switch and self.supports_capability(Capability.SWITCH):
-            await self.execute_device_command(Capability.SWITCH, Command.OFF)
+            await self.execute_device_command(
+                Capability.SWITCH,
+                Command.OFF,
+                assume={(Capability.SWITCH, Attribute.SWITCH): "off"},
+            )
             return
         await self.execute_device_command(
             Capability.SAMSUNG_CE_LAMP,
             Command.SET_BRIGHTNESS_LEVEL,
             argument="off",
+            assume={(Capability.SAMSUNG_CE_LAMP, Attribute.BRIGHTNESS_LEVEL): "off"},
         )
 
     async def async_set_level(self, brightness: int) -> None:
@@ -361,6 +391,7 @@ class SmartThingsLamp(SmartThingsEntity, LightEntity):
             Capability.SAMSUNG_CE_LAMP,
             Command.SET_BRIGHTNESS_LEVEL,
             argument=level,
+            assume={(Capability.SAMSUNG_CE_LAMP, Attribute.BRIGHTNESS_LEVEL): level},
         )
         # turn on switch separately if needed
         if (
@@ -369,7 +400,11 @@ class SmartThingsLamp(SmartThingsEntity, LightEntity):
             and not self.is_on
             and brightness > 0
         ):
-            await self.execute_device_command(Capability.SWITCH, Command.ON)
+            await self.execute_device_command(
+                Capability.SWITCH,
+                Command.ON,
+                assume={(Capability.SWITCH, Attribute.SWITCH): "on"},
+            )
 
     @override
     def _update_attr(self) -> None:

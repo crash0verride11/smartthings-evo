@@ -48,6 +48,7 @@ class SmartThingsLock(SmartThingsEntity, LockEntity):
         await self.execute_device_command(
             Capability.LOCK,
             Command.LOCK,
+            assume={(Capability.LOCK, Attribute.LOCK): ST_STATE_LOCKED},
         )
 
     @override
@@ -56,6 +57,7 @@ class SmartThingsLock(SmartThingsEntity, LockEntity):
         await self.execute_device_command(
             Capability.LOCK,
             Command.UNLOCK,
+            assume={(Capability.LOCK, Attribute.LOCK): "unlocked"},
         )
 
     @property

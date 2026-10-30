@@ -3,7 +3,7 @@
 from collections.abc import Callable
 import contextlib
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import logging
 from typing import Any, cast
 
@@ -56,6 +56,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_registry import RegistryEntry, async_migrate_entries
 
 from . import compat
+from .assumed_state import AssumedKey, AssumedValue
 from .coordinator import SmartThingsCoordinator
 from .samsung_auth import SamsungAuthError, SamsungTokenManager
 
@@ -97,6 +98,8 @@ class FullDevice:
     device: Device
     status: dict[str, ComponentStatus]
     online: bool
+    # Per-device so every entity reading an attribute sees a command's expected value.
+    assumed: dict[AssumedKey, AssumedValue] = field(default_factory=dict)
 
 
 type SmartThingsConfigEntry = ConfigEntry[SmartThingsData]

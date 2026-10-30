@@ -57,6 +57,7 @@ class SmartThingsValve(SmartThingsEntity, ValveEntity):
         await self.execute_device_command(
             Capability.VALVE,
             Command.OPEN,
+            assume={(Capability.VALVE, Attribute.VALVE): "open"},
         )
 
     @override
@@ -65,6 +66,7 @@ class SmartThingsValve(SmartThingsEntity, ValveEntity):
         await self.execute_device_command(
             Capability.VALVE,
             Command.CLOSE,
+            assume={(Capability.VALVE, Attribute.VALVE): "closed"},
         )
 
     @property

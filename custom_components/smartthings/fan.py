@@ -22,6 +22,9 @@ from .entity import SmartThingsEntity
 
 SPEED_RANGE = (1, 3)  # off is not included
 
+SWITCH_ON = {(Capability.SWITCH, Attribute.SWITCH): "on"}
+SWITCH_OFF = {(Capability.SWITCH, Attribute.SWITCH): "off"}
+
 SMART = 14
 PRESET_SMART = "smart"
 
@@ -94,13 +97,22 @@ class SmartThingsFan(SmartThingsEntity, FanEntity):
     async def async_set_percentage(self, percentage: int) -> None:
         """Set the speed percentage of the fan."""
         if percentage == 0:
-            await self.execute_device_command(Capability.SWITCH, Command.OFF)
+            await self.execute_device_command(
+                Capability.SWITCH, Command.OFF, assume=SWITCH_OFF
+            )
         else:
             value = math.ceil(percentage_to_ranged_value(SPEED_RANGE, percentage))
+            assume: dict[tuple[Capability, Attribute], Any] = {
+                (Capability.FAN_SPEED, Attribute.FAN_SPEED): value
+            }
+            if self.supports_capability(Capability.SWITCH):
+                # A non-zero speed switches the fan on as well.
+                assume.update(SWITCH_ON)
             await self.execute_device_command(
                 Capability.FAN_SPEED,
                 Command.SET_FAN_SPEED,
                 argument=value,
+                assume=assume,
             )
 
     @override
@@ -110,6 +122,9 @@ class SmartThingsFan(SmartThingsEntity, FanEntity):
             Capability.AIR_CONDITIONER_FAN_MODE,
             Command.SET_FAN_MODE,
             argument=preset_mode,
+            assume={
+                (Capability.AIR_CONDITIONER_FAN_MODE, Attribute.FAN_MODE): preset_mode
+            },
         )
 
     @override
@@ -126,12 +141,16 @@ class SmartThingsFan(SmartThingsEntity, FanEntity):
         ):
             await self.async_set_percentage(percentage)
         else:
-            await self.execute_device_command(Capability.SWITCH, Command.ON)
+            await self.execute_device_command(
+                Capability.SWITCH, Command.ON, assume=SWITCH_ON
+            )
 
     @override
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the fan off."""
-        await self.execute_device_command(Capability.SWITCH, Command.OFF)
+        await self.execute_device_command(
+            Capability.SWITCH, Command.OFF, assume=SWITCH_OFF
+        )
 
     @property
     @override
@@ -217,18 +236,30 @@ class SmartThingsHood(SmartThingsEntity, FanEntity):
             Capability.SAMSUNG_CE_HOOD_FAN_SPEED,
             Command.SET_HOOD_FAN_SPEED,
             argument=SMART,
+            assume={
+                (Capability.SAMSUNG_CE_HOOD_FAN_SPEED, Attribute.HOOD_FAN_SPEED): SMART
+            },
         )
 
     @override
     async def async_set_percentage(self, percentage: int) -> None:
         """Set the speed percentage of the fan."""
         if percentage == 0:
-            await self.execute_device_command(Capability.SWITCH, Command.OFF)
+            await self.execute_device_command(
+                Capability.SWITCH, Command.OFF, assume=SWITCH_OFF
+            )
         else:
+            speed = percentage_to_ordered_list_item(self.fan_speeds, percentage)
             await self.execute_device_command(
                 Capability.SAMSUNG_CE_HOOD_FAN_SPEED,
                 Command.SET_HOOD_FAN_SPEED,
-                argument=percentage_to_ordered_list_item(self.fan_speeds, percentage),
+                argument=speed,
+                assume={
+                    (
+                        Capability.SAMSUNG_CE_HOOD_FAN_SPEED,
+                        Attribute.HOOD_FAN_SPEED,
+                    ): speed
+                },
             )
 
     @override
@@ -239,12 +270,16 @@ class SmartThingsHood(SmartThingsEntity, FanEntity):
         **kwargs: Any,
     ) -> None:
         """Turn the fan on."""
-        await self.execute_device_command(Capability.SWITCH, Command.ON)
+        await self.execute_device_command(
+            Capability.SWITCH, Command.ON, assume=SWITCH_ON
+        )
 
     @override
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the fan off."""
-        await self.execute_device_command(Capability.SWITCH, Command.OFF)
+        await self.execute_device_command(
+            Capability.SWITCH, Command.OFF, assume=SWITCH_OFF
+        )
 
     @property
     @override
