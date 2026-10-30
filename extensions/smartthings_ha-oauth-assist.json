@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 2,
+  "id": "smartthings",
+  "name": "SmartThings (Samsung account)",
+  "description": "Two-step Samsung OSP flow: Home Assistant hands its routing token to the extension before login (the callback's code/state are ciphertext only HA can read), then the sasdk:// mobile-app redirect is captured and routed back through my.home-assistant.io.",
+  "loginOrigins": ["https://*.samsung.com/*"],
+  "capture": [
+    { "type": "initiation", "ttlSeconds": 600 },
+    {
+      "type": "redirect",
+      "redirectPrefixes": ["sasdk://saccount.auth.com.samsung.android.oneconnect"]
+    }
+  ],
+  "state": { "rule": "stashed" }
+}
