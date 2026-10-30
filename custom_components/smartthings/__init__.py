@@ -224,9 +224,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SmartThingsConfigEntry) 
             device_registry, (DOMAIN, device_id), entry.entry_id
         )
         if dev_entry is not None:
-            device_registry.async_update_device(
-                dev_entry.id, remove_config_entry_id=entry.entry_id
-            )
+            compat.async_remove_device(device_registry, dev_entry.id, entry.entry_id)
 
     entry.async_on_unload(
         client.add_device_lifecycle_event_listener(
