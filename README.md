@@ -14,17 +14,17 @@ SmartThings mobile uses a Samsung account login flow that blocks automated login
 ## Setup
 
 Before starting, make sure Home Assistant Cloud is enabled and install the
-unpacked browser extension from `chrome-extension/`. The Samsung callback URL,
+unpacked browser extension from `extensions/chrome-extension/`. The Samsung callback URL,
 access token, and refresh token are credentials: never paste them into issues,
 logs, screenshots, or support requests.
 
    ### chrome-extension
    > The chrome extension is tied to the folder location on your computer and may disappear if you move the folder.
    - Download the project 
-   - Extract the zip file and locate `./chrome-extension/`
+   - Extract the zip file and locate `./extensions/chrome-extension/`
    - Open Google Chrome and navigate to `chrome://extensions/` or Edge `edge://extensions/`
    - Enable "Developer mode"
-   - Click "Load unpacked" and select the extracted `chrome-extension` folder
+   - Click "Load unpacked" and select the extracted `extensions/chrome-extension` folder
    - Start the automated authentication flow in HA by the integration
        - If your browser still has a Samsung login cookie, the login is skipped and no redirect URI is produced to capture — open the extension pop-up, reset Samsung auth to delete existing cookies, return to HA, and click `open website` to continue authentication
    - After logging in to Samsung the redirect should be captured and re-written to my-homeassistant.io

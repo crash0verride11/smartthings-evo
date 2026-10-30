@@ -158,11 +158,14 @@ async def test_extension_step_builds_sentinel_handoff(config_flow_module, monkey
     flow = _flow(config_flow_module)
 
     result = await flow.async_step_auth_extension()
-    query = parse_qs(urlparse(result["url"]).query)
+    url = urlparse(result["url"])
 
     assert result["type"] == "external"
     assert result["step_id"] == "auth_extension"
-    assert query == {
+    assert result["url"].startswith(config_flow_module.SENTINEL_BASE + "#")
+    # The handoff rides in the fragment so state_HA is never sent over the network.
+    assert url.query == ""
+    assert parse_qs(url.fragment) == {
         "state_HA": ["encoded-routing-state"],
         "signin_url": ["https://login.example/path?x=1"],
     }

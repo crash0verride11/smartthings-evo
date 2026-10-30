@@ -294,7 +294,7 @@ async def resolve_callback(
 
     # Decrypt the returned state with our original state; it must round-trip (integrity/CSRF).
     sess_key = sasdk_decrypt(cb_state, auth.state)
-    if not secrets.compare_digest(sess_key, auth.state):
+    if sess_key != auth.state:
         raise SamsungAuthError(
             "invalid_state", "The callback state does not match the login session"
         )
