@@ -39,6 +39,6 @@
   "issue_tracker": "https://github.com/crash0verride11/smartthings-evo/issues",
   "loggers": ["pysmartthings"],
   "quality_scale": "bronze",
-  "requirements": ["pysmartthings==4.0.1"],
+  "requirements": ["pysmartthings==4.0.3"],
   "version": "2026.7.1"
 }
