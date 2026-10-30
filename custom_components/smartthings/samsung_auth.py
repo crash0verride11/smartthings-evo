@@ -20,6 +20,7 @@ Everything is reproducible off-device; only dep beyond HA core is ``cryptography
 
 from __future__ import annotations
 
+import asyncio
 import base64
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -286,15 +287,22 @@ async def resolve_callback(
 
     raw_code = q.get("code", [""])[0]
     cb_state = q.get("state", [""])[0]
+    if not raw_code or not cb_state:
+        raise SamsungAuthError(
+            "invalid_callback", "The callback is missing its code or state"
+        )
 
     # Decrypt the returned state with our original state; it must round-trip (integrity/CSRF).
-    sess_key = sasdk_decrypt(cb_state, auth.state) if cb_state else ""
-    key = sess_key if sess_key == auth.state else auth.state
-    code = sasdk_decrypt(raw_code, key)
+    sess_key = sasdk_decrypt(cb_state, auth.state)
+    if sess_key != auth.state:
+        raise SamsungAuthError(
+            "invalid_state", "The callback state does not match the login session"
+        )
+    code = sasdk_decrypt(raw_code, sess_key)
 
     osp_base = f"https://{auth.osp_host}"
-    if (auth_url := q.get("auth_server_url", [""])[0]) and key:
-        host = sasdk_decrypt(auth_url, key)
+    if auth_url := q.get("auth_server_url", [""])[0]:
+        host = sasdk_decrypt(auth_url, sess_key)
         if "." in host and len(host) < 60:
             osp_base = f"https://{host}"
 
@@ -388,6 +396,7 @@ class SamsungTokenManager:
         self._session = session
         self._token = token
         self._update_token = update_token
+        self._refresh_lock = asyncio.Lock()
 
     @property
     def token(self) -> dict:
@@ -404,12 +413,16 @@ class SamsungTokenManager:
         """Return a valid access token, refreshing first if needed."""
         if self.valid():
             return self.access_token
-        osp = await refresh_token(
-            self._session,
-            self._token["refresh_token"],
-            self._token.get("osp_host", DEFAULT_OSP_HOST),
-        )
-        self._token = normalize_token(osp, self._token)
-        if self._update_token is not None:
-            await self._update_token(self._token)
-        return self.access_token
+        async with self._refresh_lock:
+            # Another request may have refreshed while this one waited for the lock.
+            if self.valid():
+                return self.access_token
+            osp = await refresh_token(
+                self._session,
+                self._token["refresh_token"],
+                self._token.get("osp_host", DEFAULT_OSP_HOST),
+            )
+            self._token = normalize_token(osp, self._token)
+            if self._update_token is not None:
+                await self._update_token(self._token)
+            return self.access_token

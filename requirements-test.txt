@@ -1,0 +1,4 @@
+aiohttp>=3.11,<4
+cryptography>=44
+pytest>=8.3,<10
+pytest-asyncio>=0.25,<2
