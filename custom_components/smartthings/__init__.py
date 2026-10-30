@@ -56,6 +56,7 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_registry import RegistryEntry, async_migrate_entries
 
+from . import compat
 from .coordinator import SmartThingsCoordinator
 from .samsung_auth import SamsungAuthError, SamsungTokenManager
 
@@ -289,9 +290,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SmartThingsConfigEntry) 
             for device_identifier in device_status
         ):
             continue
-        device_registry.async_update_device(
-            device_entry.id, remove_config_entry_id=entry.entry_id
-        )
+        compat.async_remove_device(device_registry, device_entry.id, entry.entry_id)
 
     return True
 
