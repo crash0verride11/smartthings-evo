@@ -42,12 +42,15 @@ In the SmartThings flow the callback `code`, `state`, and `*_server_url` are
 This is the intended path and is confirmed working end-to-end (July 2026). The extension
 does **no crypto**; all decryption/exchange happens server-side in the integration.
 
-1. In HA, add the SmartThings integration and choose **Automatic (SmartThings OAuth Helper
-   extension)**.
+1. In HA, add the SmartThings integration and choose **Automatic (browser extension)**.
 2. HA's config flow drives the browser to a sentinel
-   `https://ha-sasdk.example.com/start?state_HA=<jwt>&signin_url=<samsung>` (RFC 2606 reserved
-   host). The extension intercepts it before any request goes out, stores `state_HA` as
-   `pendingFlow`, and opens the Samsung login.
+   `https://ha-oauth-assist.example.com/initiate/smartthings#state_HA=<jwt>&signin_url=<samsung>`
+   (RFC 2606 reserved host; params in the never-transmitted fragment). This is the generic
+   [OAuth Assist for HA](https://github.com/crash0verride11/ha-oauth-assist) sentinel, so either
+   extension can drive the flow — install **one**, not both, or both will act on the same
+   handoff and callback. The extension intercepts it before any request goes out, stores
+   `state_HA` as `pendingFlow`, and opens the Samsung login. (The legacy
+   `https://ha-sasdk.example.com/start?state_HA=…` query form is still accepted.)
 3. Sign in (sign out first → `status=new`). On the `sasdk://` callback the extension rewrites
    to `https://my.home-assistant.io/redirect/oauth?code=<enc>&state=<state_HA>`. HA validates
    the JWT, matches the flow, and decrypts + exchanges using the `state`/`osp_host` it already
@@ -88,9 +91,11 @@ return to the copy/paste page.
 ## Files
 
 - `manifest.json` — MV3 config (`webNavigation`, `tabs`, `storage`, `cookies`; hosts
-  `https://account.samsung.com/*` and `https://ha-sasdk.example.com/*` for the sentinel).
+  `https://account.samsung.com/*`, plus `https://ha-oauth-assist.example.com/*` and the
+  legacy `https://ha-sasdk.example.com/*` for the sentinel).
 - `background.js` — service worker. `handleSentinel` intercepts the outbound
-  `https://ha-sasdk.example.com/…` handoff (stores `pendingFlow`, opens the login);
+  `https://ha-oauth-assist.example.com/initiate/smartthings#…` (or legacy
+  `https://ha-sasdk.example.com/…`) handoff (stores `pendingFlow`, opens the login);
   the `sasdk://` handler rewrites the callback to HA (via `pendingFlow`) or falls
   back to the optional `haTarget`, else the capture page. Both listeners are
   de-duped on `tabId+url`.
@@ -110,7 +115,7 @@ return to the copy/paste page.
   URL-only, which swallowed the button click right after the auto-open). Reload
   the extension if you still see it.
 - **Pasted sentinel link gets searched instead of opened:** why the sentinel host
-  is `ha-sasdk.example.com` (a real public suffix) and not `…invalid` — Edge's
+  is an `example.com` subdomain (a real public suffix) and not `…invalid` — Edge's
   omnibox searches a pasted `.invalid` link. Clicking the link always worked; the
   host change makes copy/paste into another browser work too.
 - **Nothing captured:** ensure Developer mode is on and reload the extension.

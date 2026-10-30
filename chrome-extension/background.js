@@ -47,7 +47,16 @@ function isStRedirect(url) {
 // `onBeforeNavigate` (which fires before the network request), stash `state_HA`,
 // then navigate the tab on to `signin_url`. The extension does no crypto.
 //
-// Host = `ha-sasdk.example.com` (RFC 2606 reserved — never a real third party).
+// The integration emits the generic OAuth Assist for HA sentinel, so either
+// extension can drive the flow:
+//
+//   https://ha-oauth-assist.example.com/initiate/smartthings#state_HA=<jwt>&signin_url=<url>
+//
+// Params ride in the FRAGMENT, which is never transmitted. The legacy
+// `https://ha-sasdk.example.com/…?state_HA=…` query form is still accepted for
+// integration versions that predate the switch.
+//
+// Hosts are RFC 2606 reserved `example.com` subdomains — never a real third party.
 // We deliberately use a real public suffix (`.com`) rather than a reserved
 // special-use TLD like `.invalid`: browser omniboxes navigate a pasted
 // `https://…example.com/…` link, but Edge's omnibox SEARCHES a pasted
@@ -56,10 +65,17 @@ function isStRedirect(url) {
 // when the extension is active.
 // --------------------------------------------------------------------------- //
 
-const SENTINEL_PREFIX = "https://ha-sasdk.example.com/";
+const SENTINEL_PREFIX = "https://ha-oauth-assist.example.com/initiate/smartthings#";
+const LEGACY_SENTINEL_PREFIX = "https://ha-sasdk.example.com/";
 
-function isSentinel(url) {
-  return typeof url === "string" && url.startsWith(SENTINEL_PREFIX);
+// The handoff params of a sentinel URL (either form), or null if it isn't one.
+function sentinelParams(url) {
+  if (typeof url !== "string") return null;
+  if (url.startsWith(SENTINEL_PREFIX)) {
+    return new URLSearchParams(url.slice(SENTINEL_PREFIX.length));
+  }
+  if (url.startsWith(LEGACY_SENTINEL_PREFIX)) return new URL(url).searchParams;
+  return null;
 }
 
 // De-dupe: both onBeforeNavigate and onErrorOccurred can fire for the same
@@ -75,7 +91,8 @@ let lastSentinelAt = 0;
 
 async function handleSentinel(details) {
   const url = details.url;
-  if (!isSentinel(url)) return;
+  const q = sentinelParams(url);
+  if (!q) return;
 
   const now = Date.now();
   const key = `${details.tabId}|${url}`;
@@ -83,7 +100,6 @@ async function handleSentinel(details) {
   lastSentinelKey = key;
   lastSentinelAt = now;
 
-  const q = new URL(url).searchParams;
   const stateHa = q.get("state_HA");
   const signinUrl = q.get("signin_url");
   if (!signinUrl) return; // not our handoff shape; leave it alone

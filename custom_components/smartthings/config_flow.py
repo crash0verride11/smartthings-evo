@@ -30,9 +30,18 @@ CONF_CALLBACK_URL = "callback_url"
 # OAuth callback view validates the routing JWT (state_HA) and resumes this flow.
 HA_OAUTH_REDIRECT = "https://my.home-assistant.io/redirect/oauth"
 
-# Sentinel the extension intercepts to hand off state_HA + the Samsung login URL. Reserved
-# example.com (RFC 2606), not .invalid — Edge's omnibox searches a pasted .invalid link.
-SENTINEL_BASE = "https://ha-sasdk.example.com/start"
+# Sentinel the capture extension intercepts to hand off state_HA + the Samsung login URL.
+# Both the generic OAuth Assist for HA extension and the bundled chrome-extension/ match
+# it. The parameters ride in the URL FRAGMENT, which browsers never transmit — so even
+# when the extension is absent and this URL is navigated for real, state_HA stays local
+# (IANA does not resolve example.com subdomains; at most a DNS lookup escapes). The https
+# form is used, rather than OAuth Assist's equally supported custom-scheme form
+# ("ha-oauth-assist-initiate://start/smartthings"), because users paste this URL between
+# browsers and omniboxes turn a pasted custom scheme into a web search — transmitting the
+# whole URL, fragment included, to the search engine (and the bundled extension only
+# matches the https form). The path segment is the OAuth Assist profile id and must match
+# exactly — on a mismatch either extension ignores the sentinel.
+SENTINEL_BASE = "https://ha-oauth-assist.example.com/initiate/smartthings"
 
 
 class SmartThingsConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -71,10 +80,11 @@ class SmartThingsConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Automatic path: drive the browser (via the capture extension) through login.
 
-        First entry emits the ``ha-sasdk.example.com`` sentinel carrying ``state_HA`` (HA's
-        routing JWT) and the Samsung ``signin_url``; the extension opens the login and, on
-        the ``sasdk://`` callback, routes back through ``my.home-assistant.io`` to HA's OAuth
-        callback view — which resumes this same step with ``{code, state}``.
+        First entry emits the ``ha-oauth-assist.example.com`` sentinel carrying ``state_HA``
+        (HA's routing JWT) and the Samsung ``signin_url`` in the URL fragment; the extension
+        opens the login and, on the ``sasdk://`` callback, routes back through
+        ``my.home-assistant.io`` to HA's OAuth callback view — which resumes this same step
+        with ``{code, state}``.
         """
         if user_input is not None:
             # Resumed from HA's OAuth callback view via the extension + my.home-assistant.io.
@@ -86,8 +96,10 @@ class SmartThingsConfigFlow(ConfigFlow, domain=DOMAIN):
             self.hass,
             {"flow_id": self.flow_id, "redirect_uri": HA_OAUTH_REDIRECT},
         )
+        # Fragment, not query string: a fragment is never transmitted, so state_HA
+        # stays local even if no extension intercepts the sentinel.
         sentinel = (
-            f"{SENTINEL_BASE}?state_HA={quote(state_ha, safe='')}"
+            f"{SENTINEL_BASE}#state_HA={quote(state_ha, safe='')}"
             f"&signin_url={quote(self._auth.authorize_url(), safe='')}"
         )
         return self.async_external_step(step_id="auth_extension", url=sentinel)
