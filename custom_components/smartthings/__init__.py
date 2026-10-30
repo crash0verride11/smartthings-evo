@@ -22,6 +22,7 @@ from pysmartthings import (
     SmartThingsError,
     Status,
 )
+from pysmartthings import models as pysmartthings_models
 from pysmartthings.models import HealthStatus
 
 from homeassistant.components.binary_sensor import DOMAIN as BINARY_SENSOR_DOMAIN
@@ -73,6 +74,17 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# Private Samsung capabilities the app-plane token exposes that pysmartthings doesn't
+# model and no platform uses. Pre-seed the library's warn-once set so they stay quiet;
+# getattr keeps this a no-op if a future pysmartthings renames the set.
+getattr(pysmartthings_models, "ALREADY_LOGGED_CAPABILITIES", set()).update(
+    {
+        "samsungce.deviceInfoPrivate",
+        "samsungvd.deviceInfoPrivate",
+        "samsungvd.contentInfo",
+    }
+)
 
 
 def format_zigbee_address(address: str) -> str:
