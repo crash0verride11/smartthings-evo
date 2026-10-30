@@ -51,7 +51,10 @@ def async_get_device_by_identifier(
         return device_registry.async_get_device_by_identifier(
             identifier, config_entry_id
         )
-    return device_registry.async_get_device(identifiers={identifier})
+    device = device_registry.async_get_device(identifiers={identifier})
+    if device is None or config_entry_id not in device.config_entries:
+        return None
+    return device
 
 
 def async_remove_device(
