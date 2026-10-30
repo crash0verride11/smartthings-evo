@@ -40,5 +40,5 @@
   "loggers": ["pysmartthings"],
   "quality_scale": "bronze",
   "requirements": ["pysmartthings==4.0.3"],
-  "version": "2026.10.4"
+  "version": "2026.10.0"
 }
