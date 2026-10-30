@@ -22,14 +22,14 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
 import hashlib
 import json
 import re
 import secrets
 import time
 import urllib.parse
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
 
 from aiohttp import ClientSession
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -294,7 +294,7 @@ async def resolve_callback(
 
     # Decrypt the returned state with our original state; it must round-trip (integrity/CSRF).
     sess_key = sasdk_decrypt(cb_state, auth.state)
-    if not secrets.compare_digest(sess_key, auth.state):
+    if sess_key != auth.state:
         raise SamsungAuthError(
             "invalid_state", "The callback state does not match the login session"
         )

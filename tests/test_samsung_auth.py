@@ -165,6 +165,23 @@ async def test_resolve_callback_rejects_mismatched_state(samsung_auth):
 
 
 @pytest.mark.asyncio
+async def test_resolve_callback_rejects_state_encrypted_with_other_key(samsung_auth):
+    auth = samsung_auth.SamsungAuthSession(
+        verifier="verifier", state="0123456789abcdef0123456789abcdef"
+    )
+    # Decrypting with the wrong key yields non-ASCII garbage, not a clean mismatch.
+    state = _encrypt_callback(auth.state, "fedcba9876543210")
+    code = _encrypt_callback("authorization-code", auth.state)
+
+    with pytest.raises(samsung_auth.SamsungAuthError) as error:
+        await samsung_auth.resolve_callback(
+            object(), auth, f"sasdk://callback?code={code}&state={state}"
+        )
+
+    assert error.value.error == "invalid_state"
+
+
+@pytest.mark.asyncio
 async def test_resolve_callback_surfaces_samsung_error(samsung_auth):
     auth = samsung_auth.SamsungAuthSession.create()
 
