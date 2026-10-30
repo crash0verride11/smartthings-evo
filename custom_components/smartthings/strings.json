@@ -227,6 +227,14 @@
     "media_player": {
       "media_player": {
         "state_attributes": {
+          "sound_mode": {
+            "state": {
+              "adaptive_sound": "Adaptive sound",
+              "game": "Game",
+              "standard": "Standard",
+              "surround": "Surround"
+            }
+          },
           "source": {
             "state": {
               "am": "AM",
