@@ -31,7 +31,7 @@ CONF_CALLBACK_URL = "callback_url"
 HA_OAUTH_REDIRECT = "https://my.home-assistant.io/redirect/oauth"
 
 # Sentinel the capture extension intercepts to hand off state_HA + the Samsung login URL.
-# Both the generic OAuth Assist for HA extension and the bundled chrome-extension/ match
+# Both the generic OAuth Assist for HA extension and the bundled extensions/chrome-extension/ match
 # it. The parameters ride in the URL FRAGMENT, which browsers never transmit — so even
 # when the extension is absent and this URL is navigated for real, state_HA stays local
 # (IANA does not resolve example.com subdomains; at most a DNS lookup escapes). The https
