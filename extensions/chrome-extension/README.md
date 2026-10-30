@@ -91,7 +91,7 @@ return to the copy/paste page.
 ## Files
 
 - `manifest.json` — MV3 config (`webNavigation`, `tabs`, `storage`, `cookies`; hosts
-  `https://account.samsung.com/*`, plus `https://ha-oauth-assist.example.com/*` and the
+  `https://*.samsung.com/*`, plus `https://ha-oauth-assist.example.com/*` and the
   legacy `https://ha-sasdk.example.com/*` for the sentinel).
 - `background.js` — service worker. `handleSentinel` intercepts the outbound
   `https://ha-oauth-assist.example.com/initiate/smartthings#…` (or legacy
@@ -103,7 +103,7 @@ return to the copy/paste page.
   masked code + debug param table, with Copy buttons. Data comes from
   `chrome.storage` (`lastCallback`), not the page URL.
 - `popup.html` / `popup.js` — configure/clear the optional HA target; shows last
-  capture; **Reset Samsung Auth** clears `account.samsung.com` cookies (mirrors
+  capture; **Reset Samsung Auth** clears `samsung.com` cookies, including subdomains (mirrors
   the Mazda extension's "Clear cookies" button, scoped to Samsung).
 - `icon16/48/128.svg` — toolbar icons.
 
@@ -126,5 +126,5 @@ return to the copy/paste page.
   Re-run, sign out first, and paste promptly.
 - **Wrong `status`:** if you see `status=change`, you reused a session — sign
   out of Samsung and retry for `status=new`. Use the popup's **Reset Samsung
-  Auth** button to clear `account.samsung.com` cookies without a manual
+  Auth** button to clear `samsung.com` cookies without a manual
   sign-out.
