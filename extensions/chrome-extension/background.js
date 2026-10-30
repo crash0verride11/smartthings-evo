@@ -47,7 +47,16 @@ function isStRedirect(url) {
 // `onBeforeNavigate` (which fires before the network request), stash `state_HA`,
 // then navigate the tab on to `signin_url`. The extension does no crypto.
 //
-// Host = `ha-sasdk.example.com` (RFC 2606 reserved — never a real third party).
+// The integration emits the generic OAuth Assist for HA sentinel, so either
+// extension can drive the flow:
+//
+//   https://ha-oauth-assist.example.com/initiate/smartthings#state_HA=<jwt>&signin_url=<url>
+//
+// Params ride in the FRAGMENT, which is never transmitted. The legacy
+// `https://ha-sasdk.example.com/…?state_HA=…` query form is still accepted for
+// integration versions that predate the switch.
+//
+// Hosts are RFC 2606 reserved `example.com` subdomains — never a real third party.
 // We deliberately use a real public suffix (`.com`) rather than a reserved
 // special-use TLD like `.invalid`: browser omniboxes navigate a pasted
 // `https://…example.com/…` link, but Edge's omnibox SEARCHES a pasted
@@ -56,10 +65,52 @@ function isStRedirect(url) {
 // when the extension is active.
 // --------------------------------------------------------------------------- //
 
-const SENTINEL_PREFIX = "https://ha-sasdk.example.com/";
+const SENTINEL_PREFIX = "https://ha-oauth-assist.example.com/initiate/smartthings#";
+const LEGACY_SENTINEL_PREFIX = "https://ha-sasdk.example.com/";
 
-function isSentinel(url) {
-  return typeof url === "string" && url.startsWith(SENTINEL_PREFIX);
+// Where codes are forwarded. Fixed, never taken from the sentinel: it routes to
+// the user's OWN HA instance, so a planted handoff can't steer a code elsewhere.
+const HA_FORWARD_URL = "https://my.home-assistant.io/redirect/oauth";
+
+// The handoff params of a sentinel URL (either form), or null if it isn't one.
+function sentinelParams(url) {
+  if (typeof url !== "string") return null;
+  if (url.startsWith(SENTINEL_PREFIX)) {
+    return new URLSearchParams(url.slice(SENTINEL_PREFIX.length));
+  }
+  if (url.startsWith(LEGACY_SENTINEL_PREFIX)) return new URL(url).searchParams;
+  return null;
+}
+
+// ANY WEB PAGE CAN NAVIGATE TO THE SENTINEL, so its params are untrusted. Only
+// send the tab on to a Samsung login page — otherwise this is an open redirect.
+function isSamsungLogin(url) {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.toLowerCase();
+    return (
+      u.protocol === "https:" &&
+      (host === "samsung.com" || host.endsWith(".samsung.com"))
+    );
+  } catch (e) {
+    return false;
+  }
+}
+
+// Structural check only (no crypto): HA's state is a JWT naming a flow_id.
+// Rejects garbage before we act on it; HA itself verifies the signature.
+function isHomeAssistantFlow(state) {
+  if (!state) return false;
+  try {
+    const parts = state.split(".");
+    if (parts.length !== 3) return false;
+    const payload = JSON.parse(
+      atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")),
+    );
+    return payload && typeof payload.flow_id === "string";
+  } catch (e) {
+    return false;
+  }
 }
 
 // De-dupe: both onBeforeNavigate and onErrorOccurred can fire for the same
@@ -74,19 +125,22 @@ let lastSentinelKey = null;
 let lastSentinelAt = 0;
 
 async function handleSentinel(details) {
+  // Top-level navigations only: a hidden iframe cannot plant a flow silently.
+  if (details.frameId !== 0) return;
+
   const url = details.url;
-  if (!isSentinel(url)) return;
+  const q = sentinelParams(url);
+  if (!q) return;
+
+  const stateHa = q.get("state_HA");
+  const signinUrl = q.get("signin_url");
+  if (!isHomeAssistantFlow(stateHa) || !isSamsungLogin(signinUrl)) return;
 
   const now = Date.now();
   const key = `${details.tabId}|${url}`;
   if (key === lastSentinelKey && now - lastSentinelAt < 2000) return;
   lastSentinelKey = key;
   lastSentinelAt = now;
-
-  const q = new URL(url).searchParams;
-  const stateHa = q.get("state_HA");
-  const signinUrl = q.get("signin_url");
-  if (!signinUrl) return; // not our handoff shape; leave it alone
 
   // Redirect to the real Samsung login FIRST. The sentinel host resolves (it's a
   // real public suffix), so leaving early minimises any chance it paints/loads
@@ -97,16 +151,11 @@ async function handleSentinel(details) {
   chrome.action.setBadgeText({ text: "…" });
   chrome.action.setBadgeBackgroundColor({ color: "#1428a0" });
 
-  // Remember which pending HA flow this browser session belongs to, so the
-  // eventual sasdk:// callback can be routed back with the right state_HA.
-  // `return_url` lets HA choose the router (defaults to my.home-assistant.io).
+  // Remember which pending HA flow this tab belongs to, so the eventual
+  // sasdk:// callback can be routed back with the right state_HA. The tabId
+  // binding keeps a flow planted in one tab from capturing a login in another.
   await chrome.storage.local.set({
-    pendingFlow: {
-      stateHa,
-      signinUrl,
-      returnUrl: q.get("return_url") || undefined,
-      time: now,
-    },
+    pendingFlow: { stateHa, tabId: details.tabId, time: now },
   });
 }
 
@@ -150,8 +199,8 @@ async function handle(details) {
 
   // Preferred path: an HA-initiated flow. The sentinel handoff left a
   // `pendingFlow` with `state_HA` (HA's routing JWT). Rewrite to the HA OAuth
-  // router (my.home-assistant.io by default) carrying the encrypted `code` and
-  // `state_HA` — HA validates the JWT, matches the flow, and decrypts/exchanges
+  // router (my.home-assistant.io) carrying the encrypted `code` and `state_HA`
+  // — HA validates the JWT, matches the flow, and decrypts/exchanges
   // server-side using the `state_S` it already holds. We forward ONLY code +
   // state (all my.home-assistant.io forwards anyway); HA needs nothing else.
   const { pendingFlow } = await chrome.storage.local.get("pendingFlow");
@@ -159,26 +208,21 @@ async function handle(details) {
   if (
     pendingFlow &&
     pendingFlow.stateHa &&
+    pendingFlow.tabId === details.tabId &&
     now - (pendingFlow.time || 0) < PENDING_TTL_MS &&
     (params.code || params.error)
   ) {
-    const target = pendingFlow.returnUrl || "https://my.home-assistant.io/redirect/oauth";
-    try {
-      const ha = new URL(target);
-      if (params.code) ha.searchParams.set("code", params.code);
-      if (params.error) {
-        ha.searchParams.set("error", params.error);
-        if (params.error_description)
-          ha.searchParams.set("error_description", params.error_description);
-      }
-      ha.searchParams.set("state", pendingFlow.stateHa);
-      await chrome.storage.local.remove("pendingFlow");
-      chrome.tabs.update(details.tabId, { url: ha.toString() });
-      return;
-    } catch (e) {
-      // Bad return URL — fall through to haTarget/capture so nothing is lost.
-      console.warn("Invalid pendingFlow return URL, falling back:", e);
+    const ha = new URL(HA_FORWARD_URL);
+    if (params.code) ha.searchParams.set("code", params.code);
+    if (params.error) {
+      ha.searchParams.set("error", params.error);
+      if (params.error_description)
+        ha.searchParams.set("error_description", params.error_description);
     }
+    ha.searchParams.set("state", pendingFlow.stateHa);
+    await chrome.storage.local.remove("pendingFlow");
+    chrome.tabs.update(details.tabId, { url: ha.toString() });
+    return;
   }
 
   // Optional auto-forward: only when the user configured a HA target. Forward

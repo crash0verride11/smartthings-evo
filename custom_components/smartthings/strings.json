@@ -47,17 +47,17 @@
         "title": "Sign in with Samsung account",
         "description": "Choose how to sign in.",
         "menu_options": {
-          "auth_extension": "Automatic (SmartThings OAuth Helper extension)",
+          "auth_extension": "Automatic (browser extension)",
           "auth_manual": "Manual (copy the callback URL myself)"
         }
       },
       "auth_extension": {
         "title": "Signing in with your Samsung account",
-        "description": "A new window is opening the Samsung login. Sign in there; the SmartThings OAuth Helper browser extension will finish the setup automatically. Keep this window open."
+        "description": "A new window is opening the Samsung login. Sign in there; the browser extension (OAuth Assist for HA, or the bundled SmartThings OAuth Helper) will finish the setup automatically. Keep this window open."
       },
       "auth_manual": {
         "title": "Sign in with Samsung account",
-        "description": "1. Open this link and sign in to your Samsung account:\n\n[Open Samsung login]({authorize_url})\n\n2. After signing in, the SmartThings OAuth Helper browser extension captures the `sasdk://...` redirect (or copy it from the extension).\n\n3. Paste the full `sasdk://...` callback URL below. It is valid for ~5 minutes.",
+        "description": "1. Open this link and sign in to your Samsung account:\n\n[Open Samsung login]({authorize_url})\n\n2. After signing in, the browser extension (OAuth Assist for HA, or the bundled SmartThings OAuth Helper) captures the `sasdk://...` redirect (or copy it from the extension).\n\n3. Paste the full `sasdk://...` callback URL below. It is valid for ~5 minutes.",
         "data": {
           "callback_url": "Callback URL"
         },
