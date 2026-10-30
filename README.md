@@ -13,6 +13,11 @@ SmartThings mobile uses a Samsung account login flow that blocks automated login
 
 ## Setup
 
+Before starting, make sure Home Assistant Cloud is enabled and install the
+unpacked browser extension from `extensions/chrome-extension/`. The Samsung callback URL,
+access token, and refresh token are credentials: never paste them into issues,
+logs, screenshots, or support requests.
+
    ### chrome-extension
    > The chrome extension is tied to the folder location on your computer and may disappear if you move the folder.
    - Download the project 
@@ -27,6 +32,16 @@ SmartThings mobile uses a Samsung account login flow that blocks automated login
 
    ### Known Issue
    - A tab loads a 500 internal server error but authentication proceeds in HA
+
+## Verification checklist
+
+- Run the automatic flow once with the extension reloaded after installation.
+- If the browser has an existing Samsung session, use the extension's **Reset
+  Samsung Auth** action or sign out first so the flow starts with `status=new`.
+- Confirm the SmartThings entry is created and devices appear.
+- Allow one 30-second polling interval and confirm device state updates.
+- If automatic sign-in fails, use the manual copy/paste path before collecting
+  diagnostics; redact the full callback URL first.
 
 # Original codeowner
 Thanks to joostlek for handling the integration thus far
