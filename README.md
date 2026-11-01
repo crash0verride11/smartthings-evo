@@ -9,10 +9,15 @@ Within the last year I've more heavily used AI to work on various home assistant
 
 # Authentication
 
-> [!IMPORTANT]recommended for easy authentication with SmartThings (capture the sasdk:// URI). A manual option is available, but required inspecting the 'Not Found' page and copying the callback url.
+> [!IMPORTANT]
+> A browser extension is recommended for easy authentication with SmartThings (capture the sasdk:// URI). A manual option is available, but requires inspecting the 'Not Found' page and copying the callback url.
+
 SmartThings mobile uses a Samsung account login flow that blocks automated logins. Authentication requires capturing a mobile app redirect URI.
 
 ## Setup
+
+> [!WARNING]
+> The Samsung callback URL, access token, and refresh token are credentials: never paste them into issues, logs, screenshots, or support requests.
 
 ### HA OAuth Assist (chrome and firefox extensions)
 
@@ -20,7 +25,7 @@ SmartThings mobile uses a Samsung account login flow that blocks automated login
 
 This new extension is effectively the same as the original, but generic, designed for use across multiple authentication platforms, and will hopefully be available in chrome and firefox stores, pending approval. Future extension development will be focused on this one moving forward.
 
-1. Download the HA OAuth Assist extension for your browser from the [latest release](https://github.com/crash0verride11/ha-oauth-assist/releases/latest/) page, chromium for firefox
+1. Download the HA OAuth Assist extension for your browser from the [latest release](https://github.com/crash0verride11/ha-oauth-assist/releases/latest/) page, chromium or firefox
 2. Extract the zip file (or use source)
 3. Install the extension
   - Chrome:
@@ -30,14 +35,14 @@ This new extension is effectively the same as the original, but generic, designe
   - Firefox:
     - Open the extension/ folder
     - Go to about:debugging → Load Temporary Add-on
-4. In a new tab, click the extension's icon to open it's popup
+4. In a new tab, click the extension's icon to open its popup
 5. Select `Manage providers...`
 6. Download and import the [smartthings_ha-oauth-assist.json](https://github.com/crash0verride11/smartthings-evo/blob/main/extensions/smartthings_ha-oauth-assist.json) provider profile
 7. Enable the `SmartThings (Samsung account)` provider profile
 8. Start the authentication process in Home Assistant
 
    ### Legacy chrome-extension
-   > For the time being I will continue to main this integration specific version of the extension. The chrome extension is tied to the folder location on your computer and may disappear if you move the folder.
+   > For the time being I will continue to maintain this integration specific version of the extension. The chrome extension is tied to the folder location on your computer and may disappear if you move the folder.
    - Download the project 
    - Extract the zip file and locate `./extensions/chrome-extension/`
    - Open Google Chrome and navigate to `chrome://extensions/` or Edge `edge://extensions/`
